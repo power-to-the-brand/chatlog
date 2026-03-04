@@ -70,6 +70,28 @@ func LoadServiceConfig(configPath string, cmdConf map[string]any) (*ServerConfig
 		return nil, nil, err
 	}
 
+	// Fallback to TUI config (chatlog.json) when server config has no data_dir
+	if len(conf.DataDir) == 0 {
+		if tuiConf, _, err := LoadTUIConfig(configPath); err == nil {
+			history := tuiConf.ParseHistory()
+			account := tuiConf.LastAccount
+			if account == "" && len(tuiConf.History) > 0 {
+				account = tuiConf.History[0].Account
+			}
+			if pc, ok := history[account]; ok && len(pc.DataDir) > 0 {
+				conf.Type = pc.Type
+				conf.Platform = pc.Platform
+				conf.Version = pc.Version
+				conf.FullVersion = pc.FullVersion
+				conf.DataDir = pc.DataDir
+				conf.DataKey = pc.DataKey
+				conf.ImgKey = pc.ImgKey
+				conf.WorkDir = pc.WorkDir
+				log.Info().Msgf("using account %q from TUI config", account)
+			}
+		}
+	}
+
 	// Load Data Dir config
 	if len(conf.DataDir) != 0 && len(conf.DataKey) == 0 {
 		if b, err := os.ReadFile(filepath.Join(conf.DataDir, "chatlog.json")); err == nil {

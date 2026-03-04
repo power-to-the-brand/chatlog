@@ -112,7 +112,6 @@ Formats each message as `sender time\ncontent` (e.g. "我 09:09:13\nyou are old 
 ```sql
 SELECT 
   CASE 
-    WHEN is_self THEN '我'
     WHEN sender_name IS NOT NULL AND sender_name != '' 
       THEN sender_name || '(' || sender || ')'
     ELSE sender
@@ -140,8 +139,7 @@ Returns one string with the entire conversation in the same format.
 
 ```sql
 SELECT string_agg(
-  CASE WHEN is_self THEN '我' 
-       WHEN sender_name IS NOT NULL AND sender_name != '' 
+  CASE WHEN sender_name IS NOT NULL AND sender_name != '' 
          THEN sender_name || '(' || sender || ')'
        ELSE sender 
   END 
