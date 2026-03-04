@@ -1,11 +1,18 @@
 package conf
 
 type TUIConfig struct {
-	ConfigDir   string          `mapstructure:"-" json:"config_dir"`
-	LastAccount string          `mapstructure:"last_account" json:"last_account"`
-	History     []ProcessConfig `mapstructure:"history" json:"history"`
-	Webhook     *Webhook        `mapstructure:"webhook" json:"webhook"`
-	Postgres    *PostgresConfig `mapstructure:"postgres" json:"postgres"`
+	ConfigDir        string            `mapstructure:"-" json:"config_dir"`
+	LastAccount      string            `mapstructure:"last_account" json:"last_account"`
+	History          []ProcessConfig   `mapstructure:"history" json:"history"`
+	Webhook          *Webhook          `mapstructure:"webhook" json:"webhook"`
+	Postgres         *PostgresConfig   `mapstructure:"postgres" json:"postgres"`
+	SupplierMappings []SupplierMapping `mapstructure:"supplier_mappings" json:"supplier_mappings"`
+}
+
+// SupplierMapping associates an account with a set of talker → supplier_id mappings.
+type SupplierMapping struct {
+	Account  string            `mapstructure:"account" json:"account"`
+	Mappings map[string]string `mapstructure:"mappings" json:"mappings"`
 }
 
 // PostgresConfig holds PostgreSQL connection settings for sync.
@@ -43,4 +50,14 @@ func (c *TUIConfig) ParseHistory() map[string]ProcessConfig {
 		m[v.Account] = v
 	}
 	return m
+}
+
+// GetSupplierMappings returns the talker → supplier_id mappings for the given account.
+func (c *TUIConfig) GetSupplierMappings(account string) map[string]string {
+	for _, sm := range c.SupplierMappings {
+		if sm.Account == account {
+			return sm.Mappings
+		}
+	}
+	return nil
 }

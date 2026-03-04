@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sjzar/chatlog/internal/chatlog/ctx"
+	"github.com/sjzar/chatlog/internal/model"
 	"github.com/sjzar/chatlog/internal/ui/footer"
 	"github.com/sjzar/chatlog/internal/ui/form"
 	"github.com/sjzar/chatlog/internal/ui/help"
@@ -415,15 +416,23 @@ func (a *App) initMenu() {
 		Selected:    a.selectAccountSelected,
 	}
 
+	supplierMapping := &menu.Item{
+		Index:       8,
+		Name:        "Supplier Mapping",
+		Description: "Map conversations to supplier IDs for sync",
+		Selected:    a.supplierMappingSelected,
+	}
+
 	a.menu.AddItem(getDataKey)
 	a.menu.AddItem(decryptData)
 	a.menu.AddItem(httpServer)
 	a.menu.AddItem(autoDecrypt)
 	a.menu.AddItem(setting)
 	a.menu.AddItem(selectAccount)
+	a.menu.AddItem(supplierMapping)
 
 	a.menu.AddItem(&menu.Item{
-		Index:       8,
+		Index:       9,
 		Name:        "Exit",
 		Description: "Exit the program",
 		Selected: func(i *menu.Item) {
@@ -602,6 +611,107 @@ func (a *App) settingDataDir() {
 		a.ctx.DataDir = tempDataDir
 		a.mainPages.RemovePage("submenu2")
 		a.showInfo("Data directory set to " + a.ctx.DataDir)
+	})
+
+	formView.AddButton("Cancel", func() {
+		a.mainPages.RemovePage("submenu2")
+	})
+
+	a.mainPages.AddPage("submenu2", formView, true, true)
+	a.SetFocus(formView)
+}
+
+// supplierMappingSelected handles the Supplier Mapping menu item.
+func (a *App) supplierMappingSelected(i *menu.Item) {
+	modal := tview.NewModal().SetText("Loading sessions...")
+	a.mainPages.AddPage("modal", modal, true, true)
+	a.SetFocus(modal)
+
+	go func() {
+		// Ensure DB is started (same pattern as RefreshSession)
+		if a.m.db.GetDB() == nil {
+			if err := a.m.db.Start(); err != nil {
+				a.QueueUpdateDraw(func() {
+					modal.SetText("Failed to start database: " + err.Error())
+					modal.AddButtons([]string{"OK"})
+					modal.SetDoneFunc(func(int, string) { a.mainPages.RemovePage("modal") })
+					a.SetFocus(modal)
+				})
+				return
+			}
+		}
+		resp, err := a.m.db.GetSessions("", 0, 0)
+		a.QueueUpdateDraw(func() {
+			a.mainPages.RemovePage("modal")
+			if err != nil {
+				a.showError(fmt.Errorf("failed to load sessions: %v", err))
+				return
+			}
+			a.showSupplierMappingMenu(resp.Items)
+		})
+	}()
+}
+
+// showSupplierMappingMenu shows a submenu listing all sessions with their mapping status.
+func (a *App) showSupplierMappingMenu(sessions []*model.Session) {
+	subMenu := menu.NewSubMenu("Supplier Mapping")
+	mappings := a.ctx.GetSupplierMappings()
+
+	for idx, sess := range sessions {
+		tag := "[unmapped]"
+		if sid, ok := mappings[sess.UserName]; ok {
+			tag = fmt.Sprintf("[%s]", sid)
+		}
+		name := fmt.Sprintf("%s (%s) %s", sess.NickName, sess.UserName, tag)
+
+		session := sess
+		currentSID := mappings[sess.UserName]
+		subMenu.AddItem(&menu.Item{
+			Index:       idx + 1,
+			Name:        name,
+			Description: "Edit supplier mapping",
+			Selected: func(*menu.Item) {
+				a.showSupplierMappingForm(session, currentSID)
+			},
+		})
+	}
+
+	if len(sessions) == 0 {
+		subMenu.AddItem(&menu.Item{
+			Index:       1,
+			Name:        "No sessions available",
+			Description: "Decrypt data first to load sessions",
+		})
+	}
+
+	a.mainPages.AddPage("submenu", subMenu, true, true)
+	a.SetFocus(subMenu)
+}
+
+// showSupplierMappingForm shows a form to edit the supplier mapping for a session.
+func (a *App) showSupplierMappingForm(session *model.Session, currentSupplierID string) {
+	formView := form.NewForm(fmt.Sprintf("Mapping: %s", session.NickName))
+
+	tempSupplierID := currentSupplierID
+
+	formView.AddInputField("Supplier ID", tempSupplierID, 0, nil, func(text string) {
+		tempSupplierID = text
+	})
+
+	formView.AddButton("Save", func() {
+		if tempSupplierID != "" {
+			a.ctx.SetSupplierMapping(session.UserName, tempSupplierID)
+		}
+		a.mainPages.RemovePage("submenu2")
+		a.mainPages.RemovePage("submenu")
+		a.showInfo(fmt.Sprintf("Mapped %s → %s", session.UserName, tempSupplierID))
+	})
+
+	formView.AddButton("Clear", func() {
+		a.ctx.RemoveSupplierMapping(session.UserName)
+		a.mainPages.RemovePage("submenu2")
+		a.mainPages.RemovePage("submenu")
+		a.showInfo(fmt.Sprintf("Cleared mapping for %s", session.UserName))
 	})
 
 	formView.AddButton("Cancel", func() {

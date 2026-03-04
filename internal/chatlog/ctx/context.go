@@ -247,6 +247,59 @@ func (c *Context) SetAutoDecrypt(enabled bool) {
 	c.UpdateConfig()
 }
 
+// GetSupplierMappings returns the talker → supplier_id mappings for the current account.
+func (c *Context) GetSupplierMappings() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.conf.GetSupplierMappings(c.Account)
+}
+
+// SetSupplierMapping adds or updates a supplier mapping for the current account and persists it.
+func (c *Context) SetSupplierMapping(talker, supplierID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Find or create the mapping entry for this account
+	found := false
+	for i, sm := range c.conf.SupplierMappings {
+		if sm.Account == c.Account {
+			if sm.Mappings == nil {
+				c.conf.SupplierMappings[i].Mappings = make(map[string]string)
+			}
+			c.conf.SupplierMappings[i].Mappings[talker] = supplierID
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.conf.SupplierMappings = append(c.conf.SupplierMappings, conf.SupplierMapping{
+			Account:  c.Account,
+			Mappings: map[string]string{talker: supplierID},
+		})
+	}
+
+	if err := c.cm.SetConfig("supplier_mappings", c.conf.SupplierMappings); err != nil {
+		log.Error().Err(err).Msg("set supplier_mappings failed")
+	}
+}
+
+// RemoveSupplierMapping removes a supplier mapping for the current account and persists it.
+func (c *Context) RemoveSupplierMapping(talker string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for i, sm := range c.conf.SupplierMappings {
+		if sm.Account == c.Account {
+			delete(c.conf.SupplierMappings[i].Mappings, talker)
+			break
+		}
+	}
+
+	if err := c.cm.SetConfig("supplier_mappings", c.conf.SupplierMappings); err != nil {
+		log.Error().Err(err).Msg("set supplier_mappings failed")
+	}
+}
+
 // 更新配置
 func (c *Context) UpdateConfig() {
 

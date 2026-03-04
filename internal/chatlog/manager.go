@@ -473,12 +473,18 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 		}
 	}
 
+	// Build supplier mappings per account
+	allMappings := make(map[string]map[string]string)
+	for _, sm := range tuiConf.SupplierMappings {
+		allMappings[sm.Account] = sm.Mappings
+	}
+
 	for _, pc := range accounts {
 		if pc.WorkDir == "" {
 			log.Info().Msgf("skip account %s: no work dir", pc.Account)
 			continue
 		}
-		if err := m.syncAccount(context.Background(), pg, &pc); err != nil {
+		if err := m.syncAccount(context.Background(), pg, &pc, allMappings[pc.Account]); err != nil {
 			return fmt.Errorf("sync account %s: %w", pc.Account, err)
 		}
 	}
@@ -487,8 +493,12 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 
 const syncBatchSize = 5000
 
-func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.ProcessConfig) error {
-	log.Info().Msgf("syncing account %s from %s", pc.Account, pc.WorkDir)
+func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.ProcessConfig, supplierMappings map[string]string) error {
+	if len(supplierMappings) == 0 {
+		log.Warn().Msgf("skip account %s: no supplier mappings configured", pc.Account)
+		return nil
+	}
+	log.Info().Msgf("syncing account %s from %s (%d mapped conversations)", pc.Account, pc.WorkDir, len(supplierMappings))
 	db, err := wechatdb.New(pc.WorkDir, pc.Platform, pc.Version)
 	if err != nil {
 		return fmt.Errorf("open wechatdb: %w", err)
@@ -551,6 +561,10 @@ func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.P
 		if talker == "" {
 			continue
 		}
+		supplierID, mapped := supplierMappings[talker]
+		if !mapped {
+			continue
+		}
 		offset := 0
 		for {
 			msgs, err := db.GetMessages(startTime, endTime, talker, "", "", syncBatchSize, offset)
@@ -561,7 +575,7 @@ func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.P
 			if len(msgs) == 0 {
 				break
 			}
-			n, err := pg.UpsertMessages(ctx, accountID, msgs)
+			n, err := pg.UpsertMessages(ctx, accountID, msgs, supplierID)
 			if err != nil {
 				return fmt.Errorf("upsert messages: %w", err)
 			}

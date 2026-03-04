@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS chat_room_members (
 	display_name TEXT,
 	PRIMARY KEY (chat_room_id, user_name)
 );
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS supplier_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_messages_supplier_id ON messages(supplier_id) WHERE supplier_id IS NOT NULL;
 `
 
 // Migrate runs the schema migration.

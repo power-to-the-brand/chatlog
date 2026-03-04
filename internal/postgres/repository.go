@@ -27,16 +27,22 @@ func (c *Conn) UpsertAccount(ctx context.Context, account, platform string, vers
 }
 
 // UpsertMessages bulk upserts messages. Uses ON CONFLICT to skip duplicates.
-func (c *Conn) UpsertMessages(ctx context.Context, accountID uuid.UUID, messages []*model.Message) (int, error) {
+// supplierID is stored as-is; pass empty string for NULL.
+func (c *Conn) UpsertMessages(ctx context.Context, accountID uuid.UUID, messages []*model.Message, supplierID string) (int, error) {
 	if len(messages) == 0 {
 		return 0, nil
+	}
+	// Convert empty string to nil for proper SQL NULL.
+	var sid any
+	if supplierID != "" {
+		sid = supplierID
 	}
 	batch := &pgx.Batch{}
 	for _, m := range messages {
 		contentsJSON, _ := json.Marshal(m.Contents)
 		batch.Queue(`
-			INSERT INTO messages (account_id, seq, time, talker, talker_name, is_chat_room, sender, sender_name, is_self, type, sub_type, content, contents)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			INSERT INTO messages (account_id, seq, time, talker, talker_name, is_chat_room, sender, sender_name, is_self, type, sub_type, content, contents, supplier_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			ON CONFLICT (account_id, seq) DO UPDATE SET
 				time = EXCLUDED.time,
 				talker = EXCLUDED.talker,
@@ -48,8 +54,9 @@ func (c *Conn) UpsertMessages(ctx context.Context, accountID uuid.UUID, messages
 				type = EXCLUDED.type,
 				sub_type = EXCLUDED.sub_type,
 				content = EXCLUDED.content,
-				contents = EXCLUDED.contents
-		`, accountID, m.Seq, m.Time, m.Talker, m.TalkerName, m.IsChatRoom, m.Sender, m.SenderName, m.IsSelf, m.Type, m.SubType, m.Content, contentsJSON)
+				contents = EXCLUDED.contents,
+				supplier_id = EXCLUDED.supplier_id
+		`, accountID, m.Seq, m.Time, m.Talker, m.TalkerName, m.IsChatRoom, m.Sender, m.SenderName, m.IsSelf, m.Type, m.SubType, m.Content, contentsJSON, sid)
 	}
 	br := c.pool.SendBatch(ctx, batch)
 	defer br.Close()
