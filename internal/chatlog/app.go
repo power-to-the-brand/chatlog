@@ -430,6 +430,20 @@ func (a *App) initMenu() {
 		Selected:    a.syncSelected,
 	}
 
+	setupCron := &menu.Item{
+		Index:       10,
+		Name:        "Setup Daily Sync (4pm)",
+		Description: "Add crontab entry for decrypt+sync at 4pm daily",
+		Selected: func(i *menu.Item) {
+			ok, msg := SetupCron()
+			if ok {
+				a.showInfo(msg)
+			} else {
+				a.showError(fmt.Errorf("%s", msg))
+			}
+		},
+	}
+
 	a.menu.AddItem(getDataKey)
 	a.menu.AddItem(decryptData)
 	a.menu.AddItem(httpServer)
@@ -438,9 +452,10 @@ func (a *App) initMenu() {
 	a.menu.AddItem(selectAccount)
 	a.menu.AddItem(supplierMapping)
 	a.menu.AddItem(syncPostgres)
+	a.menu.AddItem(setupCron)
 
 	a.menu.AddItem(&menu.Item{
-		Index:       10,
+		Index:       11,
 		Name:        "Exit",
 		Description: "Exit the program",
 		Selected: func(i *menu.Item) {

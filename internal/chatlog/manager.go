@@ -437,7 +437,13 @@ func (m *Manager) Sync() error {
 		WorkDir:  m.ctx.WorkDir,
 	}
 	mappings := m.ctx.GetSupplierMappings()
-	return m.syncAccount(bgCtx, pg, &pc, mappings)
+	err = m.syncAccount(bgCtx, pg, &pc, mappings)
+	if err != nil {
+		_ = pg.LogSyncRun(bgCtx, pc.Account, "failed")
+		return err
+	}
+	_ = pg.LogSyncRun(bgCtx, pc.Account, "success")
+	return nil
 }
 
 // CommandSync syncs raw conversation data to PostgreSQL.
