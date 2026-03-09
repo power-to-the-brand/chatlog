@@ -461,6 +461,8 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 	}
 	defer pg.Close()
 
+	var syncErr error
+
 	// Determine accounts to sync
 	var accounts []conf.ProcessConfig
 	if workDir, ok := cmdConf["work_dir"].(string); ok && workDir != "" {
@@ -487,13 +489,15 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 		// History accounts mode
 		history := tuiConf.ParseHistory()
 		if len(history) == 0 {
-			return fmt.Errorf("no accounts in history; add accounts via TUI or use --work-dir")
+			syncErr = fmt.Errorf("no accounts in history; add accounts via TUI or use --work-dir")
+			return syncErr
 		}
 		if accFilter, ok := cmdConf["account"].(string); ok && accFilter != "" {
 			if pc, ok := history[accFilter]; ok {
 				accounts = []conf.ProcessConfig{pc}
 			} else {
-				return fmt.Errorf("account %q not found in history", accFilter)
+				syncErr = fmt.Errorf("account %q not found in history", accFilter)
+				return syncErr
 			}
 		} else {
 			for _, pc := range history {
@@ -516,8 +520,11 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 			continue
 		}
 		if err := m.syncAccount(context.Background(), pg, &pc, allMappings[pc.Account]); err != nil {
-			return fmt.Errorf("sync account %s: %w", pc.Account, err)
+			syncErr = fmt.Errorf("sync account %s: %w", pc.Account, err)
+			_ = pg.LogSyncRun(context.Background(), pc.Account, "failed")
+			return syncErr
 		}
+		_ = pg.LogSyncRun(context.Background(), pc.Account, "success")
 	}
 	return nil
 }

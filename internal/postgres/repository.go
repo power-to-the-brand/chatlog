@@ -201,6 +201,12 @@ func (c *Conn) GetMaxMessageTimeForTalkers(ctx context.Context, accountID uuid.U
 	return result, rows.Err()
 }
 
+// LogSyncRun records a sync run for monitoring (account identity, timestamp, status).
+func (c *Conn) LogSyncRun(ctx context.Context, account, status string) error {
+	_, err := c.pool.Exec(ctx, `INSERT INTO sync_runs (account, status) VALUES ($1, $2)`, account, status)
+	return err
+}
+
 // UpdateSupplierIDForTalker updates supplier_id for all existing messages of a talker
 // when the supplier mapping has changed. Skips update when supplier_id already matches.
 func (c *Conn) UpdateSupplierIDForTalker(ctx context.Context, accountID uuid.UUID, talker, supplierID string) error {

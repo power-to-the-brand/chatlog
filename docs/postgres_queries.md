@@ -139,6 +139,35 @@ Change `'Asia/Bangkok'` to your timezone if needed.
 
 ---
 
+## Sync runs (cron monitoring)
+
+The `sync_runs` table tracks each sync per account. With 1:1 machine–account setup, `account` identifies whose data was synced.
+
+```sql
+-- Recent runs by account
+SELECT account, ran_at, status
+FROM sync_runs
+ORDER BY ran_at DESC
+LIMIT 50;
+
+-- Accounts that haven't synced successfully in 24 hours
+SELECT a.account
+FROM accounts a
+WHERE a.account NOT IN (
+  SELECT account FROM sync_runs
+  WHERE ran_at > NOW() - INTERVAL '24 hours'
+    AND status = 'success'
+);
+
+-- Failed runs
+SELECT account, ran_at, status
+FROM sync_runs
+WHERE status = 'failed'
+ORDER BY ran_at DESC;
+```
+
+---
+
 ## Column reference
 
 | Column       | Description                                  |

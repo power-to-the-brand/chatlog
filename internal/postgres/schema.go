@@ -70,6 +70,21 @@ CREATE TABLE IF NOT EXISTS chat_room_members (
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS supplier_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_messages_supplier_id ON messages(supplier_id) WHERE supplier_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS sync_runs (
+	id SERIAL PRIMARY KEY,
+	account TEXT NOT NULL,
+	ran_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	status TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sync_runs_account_ran ON sync_runs(account, ran_at);
+DO $$ BEGIN
+	IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='sync_runs' AND column_name='machine_id') THEN
+		ALTER TABLE sync_runs RENAME COLUMN machine_id TO account;
+		DROP INDEX IF EXISTS idx_sync_runs_machine_ran;
+		CREATE INDEX IF NOT EXISTS idx_sync_runs_account_ran ON sync_runs(account, ran_at);
+	END IF;
+END $$;
 `
 
 // Migrate runs the schema migration.
