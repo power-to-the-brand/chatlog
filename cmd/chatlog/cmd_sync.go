@@ -6,8 +6,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"github.com/sjzar/chatlog/internal/chatlog"
-	"github.com/sjzar/chatlog/internal/chatlog/conf"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/conf"
 )
 
 func init() {

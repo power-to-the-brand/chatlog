@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/sjzar/chatlog/internal/model"
+	"github.com/power-to-the-brand/chatlog/internal/model"
 )
 
 // UpsertAccount inserts or returns an existing account. Returns the account ID.

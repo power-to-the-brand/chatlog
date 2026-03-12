@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sjzar/chatlog/internal/chatlog/conf"
-	"github.com/sjzar/chatlog/pkg/config"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/conf"
+	"github.com/power-to-the-brand/chatlog/pkg/config"
 )
 
 func init() {

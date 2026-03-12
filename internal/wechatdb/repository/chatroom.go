@@ -7,8 +7,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/sjzar/chatlog/internal/errors"
-	"github.com/sjzar/chatlog/internal/model"
+	"github.com/power-to-the-brand/chatlog/internal/errors"
+	"github.com/power-to-the-brand/chatlog/internal/model"
 )
 
 // initChatRoomCache initializes chat room cache

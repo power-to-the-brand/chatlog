@@ -9,8 +9,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/rs/zerolog/log"
 
-	"github.com/sjzar/chatlog/internal/chatlog/database"
-	"github.com/sjzar/chatlog/internal/errors"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/database"
+	"github.com/power-to-the-brand/chatlog/internal/errors"
 )
 
 type Service struct {

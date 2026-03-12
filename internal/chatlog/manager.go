@@ -8,17 +8,17 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sjzar/chatlog/internal/chatlog/conf"
-	"github.com/sjzar/chatlog/internal/chatlog/ctx"
-	"github.com/sjzar/chatlog/internal/chatlog/database"
-	"github.com/sjzar/chatlog/internal/chatlog/http"
-	"github.com/sjzar/chatlog/internal/chatlog/wechat"
-	"github.com/sjzar/chatlog/internal/postgres"
-	"github.com/sjzar/chatlog/internal/wechatdb"
-	iwechat "github.com/sjzar/chatlog/internal/wechat"
-	"github.com/sjzar/chatlog/pkg/config"
-	"github.com/sjzar/chatlog/pkg/util"
-	"github.com/sjzar/chatlog/pkg/util/dat2img"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/conf"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/ctx"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/database"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/http"
+	"github.com/power-to-the-brand/chatlog/internal/chatlog/wechat"
+	"github.com/power-to-the-brand/chatlog/internal/postgres"
+	"github.com/power-to-the-brand/chatlog/internal/wechatdb"
+	iwechat "github.com/power-to-the-brand/chatlog/internal/wechat"
+	"github.com/power-to-the-brand/chatlog/pkg/config"
+	"github.com/power-to-the-brand/chatlog/pkg/util"
+	"github.com/power-to-the-brand/chatlog/pkg/util/dat2img"
 )
 
 // Manager 管理聊天日志应用

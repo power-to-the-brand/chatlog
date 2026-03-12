@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sjzar/chatlog/pkg/config"
+	"github.com/power-to-the-brand/chatlog/pkg/config"
 )
 
 const (

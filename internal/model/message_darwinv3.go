@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sjzar/chatlog/pkg/util/lz4"
+	"github.com/power-to-the-brand/chatlog/pkg/util/lz4"
 )
 
 // CREATE TABLE Chat_md5(talker)(

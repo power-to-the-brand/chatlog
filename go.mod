@@ -1,4 +1,4 @@
-module github.com/sjzar/chatlog
+module github.com/power-to-the-brand/chatlog
 
 go 1.24.0
 
