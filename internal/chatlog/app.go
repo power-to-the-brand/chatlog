@@ -430,8 +430,15 @@ func (a *App) initMenu() {
 		Selected:    a.syncSelected,
 	}
 
-	setupCron := &menu.Item{
+	syncAllPostgres := &menu.Item{
 		Index:       10,
+		Name:        "Sync All to PostgreSQL",
+		Description: "Sync all conversations to PostgreSQL (ignores supplier mapping)",
+		Selected:    a.syncAllSelected,
+	}
+
+	setupCron := &menu.Item{
+		Index:       11,
 		Name:        "Setup Daily Sync (4pm)",
 		Description: "Add crontab entry for decrypt+sync at 4pm daily",
 		Selected: func(i *menu.Item) {
@@ -452,10 +459,11 @@ func (a *App) initMenu() {
 	a.menu.AddItem(selectAccount)
 	a.menu.AddItem(supplierMapping)
 	a.menu.AddItem(syncPostgres)
+	a.menu.AddItem(syncAllPostgres)
 	a.menu.AddItem(setupCron)
 
 	a.menu.AddItem(&menu.Item{
-		Index:       11,
+		Index:       12,
 		Name:        "Exit",
 		Description: "Exit the program",
 		Selected: func(i *menu.Item) {
@@ -658,6 +666,30 @@ func (a *App) syncSelected(i *menu.Item) {
 				modal.SetText("Sync failed: " + err.Error())
 			} else {
 				modal.SetText("Sync completed successfully")
+			}
+			modal.AddButtons([]string{"OK"})
+			modal.SetDoneFunc(func(int, string) {
+				a.mainPages.RemovePage("modal")
+			})
+			a.SetFocus(modal)
+		})
+	}()
+}
+
+// syncAllSelected handles the Sync All to PostgreSQL menu item.
+func (a *App) syncAllSelected(i *menu.Item) {
+	modal := tview.NewModal().SetText("Syncing all conversations to PostgreSQL...")
+	a.mainPages.AddPage("modal", modal, true, true)
+	a.SetFocus(modal)
+
+	go func() {
+		err := a.m.SyncAll()
+
+		a.QueueUpdateDraw(func() {
+			if err != nil {
+				modal.SetText("Sync failed: " + err.Error())
+			} else {
+				modal.SetText("Sync all completed successfully")
 			}
 			modal.AddButtons([]string{"OK"})
 			modal.SetDoneFunc(func(int, string) {

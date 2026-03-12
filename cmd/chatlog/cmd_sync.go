@@ -18,6 +18,7 @@ func init() {
 	syncCmd.Flags().StringVarP(&syncWorkDir, "work-dir", "w", "", "Work dir (decrypted data path)")
 	syncCmd.Flags().StringVarP(&syncPlatform, "platform", "p", "", "Platform (darwin, windows)")
 	syncCmd.Flags().IntVarP(&syncVersion, "version", "v", 0, "WeChat version (3 or 4)")
+	syncCmd.Flags().BoolVar(&syncAll, "all", false, "Sync all messages (not just supplier-mapped conversations)")
 }
 
 var (
@@ -26,6 +27,7 @@ var (
 	syncWorkDir     string
 	syncPlatform    string
 	syncVersion     int
+	syncAll         bool
 )
 
 var syncCmd = &cobra.Command{
@@ -58,6 +60,9 @@ func getSyncConfig() map[string]any {
 	}
 	if syncVersion != 0 {
 		cmdConf["version"] = syncVersion
+	}
+	if syncAll {
+		cmdConf["sync_all"] = true
 	}
 	// Env fallback for postgres URL
 	if _, ok := cmdConf["postgres_url"]; !ok {

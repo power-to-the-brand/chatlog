@@ -437,7 +437,44 @@ func (m *Manager) Sync() error {
 		WorkDir:  m.ctx.WorkDir,
 	}
 	mappings := m.ctx.GetSupplierMappings()
-	err = m.syncAccount(bgCtx, pg, &pc, mappings)
+	err = m.syncAccount(bgCtx, pg, &pc, mappings, false)
+	if err != nil {
+		_ = pg.LogSyncRun(bgCtx, pc.Account, "failed")
+		return err
+	}
+	_ = pg.LogSyncRun(bgCtx, pc.Account, "success")
+	return nil
+}
+
+// SyncAll syncs all messages (not just mapped ones) from the current account to PostgreSQL.
+func (m *Manager) SyncAll() error {
+	postgresURL := m.ctx.GetPostgresURL()
+	if postgresURL == "" {
+		return fmt.Errorf("postgres URL is not configured (set it in Settings or config file)")
+	}
+	if m.ctx.Account == "" {
+		return fmt.Errorf("no account selected")
+	}
+	if m.ctx.WorkDir == "" {
+		return fmt.Errorf("no work directory configured")
+	}
+
+	bgCtx := context.Background()
+	pg, err := postgres.New(bgCtx, postgresURL)
+	if err != nil {
+		return fmt.Errorf("connect to postgres: %w", err)
+	}
+	defer pg.Close()
+
+	pc := conf.ProcessConfig{
+		Account:  m.ctx.Account,
+		Platform: m.ctx.Platform,
+		Version:  m.ctx.Version,
+		DataDir:  m.ctx.DataDir,
+		WorkDir:  m.ctx.WorkDir,
+	}
+	mappings := m.ctx.GetSupplierMappings()
+	err = m.syncAccount(bgCtx, pg, &pc, mappings, true)
 	if err != nil {
 		_ = pg.LogSyncRun(bgCtx, pc.Account, "failed")
 		return err
@@ -520,12 +557,14 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 		allMappings[sm.Account] = sm.Mappings
 	}
 
+	syncAll, _ := cmdConf["sync_all"].(bool)
+
 	for _, pc := range accounts {
 		if pc.WorkDir == "" {
 			log.Info().Msgf("skip account %s: no work dir", pc.Account)
 			continue
 		}
-		if err := m.syncAccount(context.Background(), pg, &pc, allMappings[pc.Account]); err != nil {
+		if err := m.syncAccount(context.Background(), pg, &pc, allMappings[pc.Account], syncAll); err != nil {
 			syncErr = fmt.Errorf("sync account %s: %w", pc.Account, err)
 			_ = pg.LogSyncRun(context.Background(), pc.Account, "failed")
 			return syncErr
@@ -537,12 +576,16 @@ func (m *Manager) CommandSync(configPath string, cmdConf map[string]any) error {
 
 const syncBatchSize = 5000
 
-func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.ProcessConfig, supplierMappings map[string]string) error {
-	if len(supplierMappings) == 0 {
+func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.ProcessConfig, supplierMappings map[string]string, syncAll bool) error {
+	if !syncAll && len(supplierMappings) == 0 {
 		log.Warn().Msgf("skip account %s: no supplier mappings configured", pc.Account)
 		return nil
 	}
-	log.Info().Msgf("syncing account %s from %s (%d mapped conversations)", pc.Account, pc.WorkDir, len(supplierMappings))
+	if syncAll {
+		log.Info().Msgf("syncing ALL conversations for account %s from %s", pc.Account, pc.WorkDir)
+	} else {
+		log.Info().Msgf("syncing account %s from %s (%d mapped conversations)", pc.Account, pc.WorkDir, len(supplierMappings))
+	}
 	db, err := wechatdb.New(pc.WorkDir, pc.Platform, pc.Version)
 	if err != nil {
 		return fmt.Errorf("open wechatdb: %w", err)
@@ -591,17 +634,20 @@ func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.P
 		return nil
 	}
 
-	// Build mapped talkers and fetch per-talker max message times (for incremental start)
-	mappedTalkers := make([]string, 0)
+	// Build talkers list and fetch per-talker max message times (for incremental start)
+	talkersList := make([]string, 0)
 	seen := make(map[string]bool)
 	for _, sess := range sessionsResp.Items {
 		talker := sess.UserName
-		if talker != "" && supplierMappings[talker] != "" && !seen[talker] {
+		if talker == "" || seen[talker] {
+			continue
+		}
+		if syncAll || supplierMappings[talker] != "" {
 			seen[talker] = true
-			mappedTalkers = append(mappedTalkers, talker)
+			talkersList = append(talkersList, talker)
 		}
 	}
-	maxTimes, err := pg.GetMaxMessageTimeForTalkers(ctx, accountID, mappedTalkers)
+	maxTimes, err := pg.GetMaxMessageTimeForTalkers(ctx, accountID, talkersList)
 	if err != nil {
 		return fmt.Errorf("get max message times: %w", err)
 	}
@@ -613,18 +659,20 @@ func (m *Manager) syncAccount(ctx context.Context, pg *postgres.Conn, pc *conf.P
 		if talker == "" {
 			continue
 		}
-		supplierID, mapped := supplierMappings[talker]
-		if !mapped {
+		supplierID := supplierMappings[talker]
+		if !syncAll && supplierID == "" {
 			continue
 		}
 		startTime := maxTimes[talker]
 		if startTime.IsZero() {
-			startTime = epochStart // newly mapped talker: full backfill
+			startTime = epochStart // new talker: full backfill
 		}
 
 		// Update supplier_id on existing messages (handles re-mapping)
-		if err := pg.UpdateSupplierIDForTalker(ctx, accountID, talker, supplierID); err != nil {
-			return fmt.Errorf("update supplier for talker %s: %w", talker, err)
+		if supplierID != "" {
+			if err := pg.UpdateSupplierIDForTalker(ctx, accountID, talker, supplierID); err != nil {
+				return fmt.Errorf("update supplier for talker %s: %w", talker, err)
+			}
 		}
 
 		offset := 0
