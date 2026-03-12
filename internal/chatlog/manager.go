@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -31,6 +32,10 @@ type Manager struct {
 	db     *database.Service
 	http   *http.Service
 	wechat *wechat.Service
+
+	// Auto sync
+	autoSyncStop chan struct{}
+	autoSyncMu   sync.Mutex
 
 	// Terminal UI
 	app *App
@@ -72,6 +77,11 @@ func (m *Manager) Run(configPath string) error {
 }
 
 func (m *Manager) Switch(info *iwechat.Account, history string) error {
+	if m.ctx.AutoSyncEnabled {
+		if err := m.StopAutoSync(); err != nil {
+			return err
+		}
+	}
 	if m.ctx.AutoDecrypt {
 		if err := m.StopAutoDecrypt(); err != nil {
 			return err
@@ -481,6 +491,94 @@ func (m *Manager) SyncAll() error {
 	}
 	_ = pg.LogSyncRun(bgCtx, pc.Account, "success")
 	return nil
+}
+
+// StartAutoSync starts a background goroutine that syncs to PostgreSQL at the given interval.
+// If syncAll is true, all conversations are synced; otherwise only mapped ones.
+func (m *Manager) StartAutoSync(interval time.Duration, syncAll bool) error {
+	postgresURL := m.ctx.GetPostgresURL()
+	if postgresURL == "" {
+		return fmt.Errorf("postgres URL is not configured (set it in Settings or config file)")
+	}
+	if m.ctx.Account == "" {
+		return fmt.Errorf("no account selected")
+	}
+	if m.ctx.WorkDir == "" {
+		return fmt.Errorf("no work directory configured")
+	}
+
+	if m.autoSyncStop != nil {
+		return fmt.Errorf("auto sync is already running")
+	}
+
+	m.autoSyncStop = make(chan struct{})
+	stop := m.autoSyncStop
+
+	go func() {
+		// Run immediately on start
+		m.runAutoSync(syncAll)
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				m.runAutoSync(syncAll)
+			}
+		}
+	}()
+
+	m.ctx.SetAutoSync(true, interval)
+	log.Info().Msgf("auto sync started (interval: %s, sync_all: %v)", interval, syncAll)
+	return nil
+}
+
+// StopAutoSync stops the background auto-sync goroutine.
+func (m *Manager) StopAutoSync() error {
+	if m.autoSyncStop == nil {
+		return fmt.Errorf("auto sync is not running")
+	}
+	close(m.autoSyncStop)
+	m.autoSyncStop = nil
+	m.ctx.SetAutoSync(false, 0)
+	log.Info().Msg("auto sync stopped")
+	return nil
+}
+
+// runAutoSync executes a single sync, protected by a mutex to prevent overlapping runs.
+func (m *Manager) runAutoSync(syncAll bool) {
+	if !m.autoSyncMu.TryLock() {
+		log.Debug().Msg("auto sync skipped: previous sync still running")
+		return
+	}
+	defer m.autoSyncMu.Unlock()
+
+	postgresURL := m.ctx.GetPostgresURL()
+	bgCtx := context.Background()
+	pg, err := postgres.New(bgCtx, postgresURL)
+	if err != nil {
+		log.Error().Err(err).Msg("auto sync: connect to postgres failed")
+		return
+	}
+	defer pg.Close()
+
+	pc := conf.ProcessConfig{
+		Account:  m.ctx.Account,
+		Platform: m.ctx.Platform,
+		Version:  m.ctx.Version,
+		DataDir:  m.ctx.DataDir,
+		WorkDir:  m.ctx.WorkDir,
+	}
+	mappings := m.ctx.GetSupplierMappings()
+	if err := m.syncAccount(bgCtx, pg, &pc, mappings, syncAll); err != nil {
+		log.Error().Err(err).Msg("auto sync failed")
+		_ = pg.LogSyncRun(bgCtx, pc.Account, "failed")
+		return
+	}
+	_ = pg.LogSyncRun(bgCtx, pc.Account, "success")
 }
 
 // CommandSync syncs raw conversation data to PostgreSQL.

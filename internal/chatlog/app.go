@@ -111,6 +111,17 @@ func (a *App) updateMenuItemsState() {
 			}
 		}
 
+		// Update auto sync menu item
+		if item.Index == 11 {
+			if a.ctx.AutoSyncEnabled {
+				item.Name = "Stop Auto Sync"
+				item.Description = "Stop automatic PostgreSQL sync"
+			} else {
+				item.Name = "Enable Auto Sync"
+				item.Description = "Automatically sync all messages to PostgreSQL on interval"
+			}
+		}
+
 		// Update HTTP service menu item
 		if item.Index == 4 {
 			if a.ctx.HTTPEnabled {
@@ -165,6 +176,11 @@ func (a *App) refresh() {
 				a.infoBar.UpdateAutoDecrypt("[green][Enabled][white]")
 			} else {
 				a.infoBar.UpdateAutoDecrypt("[Not enabled]")
+			}
+			if a.ctx.AutoSyncEnabled {
+				a.infoBar.UpdateAutoSync(fmt.Sprintf("[green][Enabled][white] [every %s]", a.ctx.AutoSyncInterval))
+			} else {
+				a.infoBar.UpdateAutoSync("[Not enabled]")
 			}
 
 			a.Draw()
@@ -437,8 +453,15 @@ func (a *App) initMenu() {
 		Selected:    a.syncAllSelected,
 	}
 
-	setupCron := &menu.Item{
+	autoSync := &menu.Item{
 		Index:       11,
+		Name:        "Enable Auto Sync",
+		Description: "Automatically sync all messages to PostgreSQL on interval",
+		Selected:    a.autoSyncSelected,
+	}
+
+	setupCron := &menu.Item{
+		Index:       12,
 		Name:        "Setup Daily Sync (4pm)",
 		Description: "Add crontab entry for decrypt+sync at 4pm daily",
 		Selected: func(i *menu.Item) {
@@ -460,10 +483,11 @@ func (a *App) initMenu() {
 	a.menu.AddItem(supplierMapping)
 	a.menu.AddItem(syncPostgres)
 	a.menu.AddItem(syncAllPostgres)
+	a.menu.AddItem(autoSync)
 	a.menu.AddItem(setupCron)
 
 	a.menu.AddItem(&menu.Item{
-		Index:       12,
+		Index:       13,
 		Name:        "Exit",
 		Description: "Exit the program",
 		Selected: func(i *menu.Item) {
@@ -698,6 +722,84 @@ func (a *App) syncAllSelected(i *menu.Item) {
 			a.SetFocus(modal)
 		})
 	}()
+}
+
+// autoSyncSelected handles the Auto Sync menu item.
+func (a *App) autoSyncSelected(i *menu.Item) {
+	if a.ctx.AutoSyncEnabled {
+		// Stop auto sync
+		modal := tview.NewModal().SetText("Stopping auto sync...")
+		a.mainPages.AddPage("modal", modal, true, true)
+		a.SetFocus(modal)
+
+		go func() {
+			err := a.m.StopAutoSync()
+
+			a.QueueUpdateDraw(func() {
+				if err != nil {
+					modal.SetText("Failed to stop auto sync: " + err.Error())
+				} else {
+					modal.SetText("Auto sync stopped")
+				}
+				a.updateMenuItemsState()
+				modal.AddButtons([]string{"OK"})
+				modal.SetDoneFunc(func(int, string) {
+					a.mainPages.RemovePage("modal")
+				})
+				a.SetFocus(modal)
+			})
+		}()
+		return
+	}
+
+	// Show interval selection form
+	intervals := []string{"1 minute", "2 minutes", "5 minutes", "15 minutes", "30 minutes"}
+	intervalDurations := []time.Duration{
+		1 * time.Minute,
+		2 * time.Minute,
+		5 * time.Minute,
+		15 * time.Minute,
+		30 * time.Minute,
+	}
+
+	formView := tview.NewForm()
+	selectedIndex := 1 // default to 2 minutes
+	formView.AddDropDown("Sync Interval", intervals, selectedIndex, func(option string, index int) {
+		selectedIndex = index
+	})
+	formView.AddButton("Start", func() {
+		a.mainPages.RemovePage("submenu2")
+
+		interval := intervalDurations[selectedIndex]
+		modal := tview.NewModal().SetText(fmt.Sprintf("Starting auto sync (every %s)...", interval))
+		a.mainPages.AddPage("modal", modal, true, true)
+		a.SetFocus(modal)
+
+		go func() {
+			err := a.m.StartAutoSync(interval, true)
+
+			a.QueueUpdateDraw(func() {
+				if err != nil {
+					modal.SetText("Failed to start auto sync: " + err.Error())
+				} else {
+					modal.SetText(fmt.Sprintf("Auto sync started (every %s)", interval))
+				}
+				a.updateMenuItemsState()
+				modal.AddButtons([]string{"OK"})
+				modal.SetDoneFunc(func(int, string) {
+					a.mainPages.RemovePage("modal")
+				})
+				a.SetFocus(modal)
+			})
+		}()
+	})
+	formView.AddButton("Cancel", func() {
+		a.mainPages.RemovePage("submenu2")
+	})
+
+	formView.SetBorder(true).SetTitle("Auto Sync Settings")
+	a.mainPages.AddPage("submenu2", formView, true, true)
+	a.SetFocus(formView)
 }
 
 // supplierMappingSelected handles the Supplier Mapping menu item.

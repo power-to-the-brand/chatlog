@@ -15,7 +15,7 @@ const (
 
 // InfoBarViewHeight info bar height.
 const (
-	InfoBarViewHeight = 8
+	InfoBarViewHeight = 9
 	accountRow        = 0
 	statusRow         = 1
 	platformRow       = 2
@@ -24,6 +24,7 @@ const (
 	workUsageRow      = 5
 	httpServerRow     = 6
 	autoDecryptRow    = 7
+	autoSyncRow       = 8
 
 	// 列索引
 	labelCol1 = 0 // 第一列标签
@@ -157,6 +158,13 @@ func New() *InfoBar {
 	)
 	table.SetCell(autoDecryptRow, valueCol1, tview.NewTableCell(""))
 
+	table.SetCell(
+		autoSyncRow,
+		labelCol1,
+		tview.NewTableCell(fmt.Sprintf(" [%s::]%s", headerColor, "Auto Sync:")),
+	)
+	table.SetCell(autoSyncRow, valueCol1, tview.NewTableCell(""))
+
 	// infobar
 	infoBar := &InfoBar{
 		Box:   tview.NewBox(),
@@ -215,6 +223,11 @@ func (info *InfoBar) UpdateImageKey(key string) {
 // UpdateAutoDecrypt updates Auto Decrypt value.
 func (info *InfoBar) UpdateAutoDecrypt(text string) {
 	info.table.GetCell(autoDecryptRow, valueCol1).SetText(text)
+}
+
+// UpdateAutoSync updates Auto Sync value.
+func (info *InfoBar) UpdateAutoSync(text string) {
+	info.table.GetCell(autoSyncRow, valueCol1).SetText(text)
 }
 
 // Draw draws this primitive onto the screen.

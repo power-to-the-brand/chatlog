@@ -49,6 +49,10 @@ type Context struct {
 	AutoDecrypt bool
 	LastSession time.Time
 
+	// Auto sync
+	AutoSyncEnabled  bool
+	AutoSyncInterval time.Duration
+
 	// 当前选中的微信实例
 	Current *wechat.Account
 	PID     int
@@ -252,6 +256,13 @@ func (c *Context) SetAutoDecrypt(enabled bool) {
 	}
 	c.AutoDecrypt = enabled
 	c.UpdateConfig()
+}
+
+func (c *Context) SetAutoSync(enabled bool, interval time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.AutoSyncEnabled = enabled
+	c.AutoSyncInterval = interval
 }
 
 // GetSupplierMappings returns the talker → supplier_id mappings for the current account.

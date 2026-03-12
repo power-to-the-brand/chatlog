@@ -2,6 +2,9 @@ package chatlog
 
 import (
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -19,6 +22,7 @@ func init() {
 	syncCmd.Flags().StringVarP(&syncPlatform, "platform", "p", "", "Platform (darwin, windows)")
 	syncCmd.Flags().IntVarP(&syncVersion, "version", "v", 0, "WeChat version (3 or 4)")
 	syncCmd.Flags().BoolVar(&syncAll, "all", false, "Sync all messages (not just supplier-mapped conversations)")
+	syncCmd.Flags().DurationVar(&syncInterval, "interval", 0, "Run sync repeatedly at this interval (e.g. 2m, 5m, 30m)")
 }
 
 var (
@@ -28,6 +32,7 @@ var (
 	syncPlatform    string
 	syncVersion     int
 	syncAll         bool
+	syncInterval    time.Duration
 )
 
 var syncCmd = &cobra.Command{
@@ -37,6 +42,35 @@ var syncCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		cmdConf := getSyncConfig()
 		m := chatlog.New()
+
+		if syncInterval > 0 {
+			// Run sync in a loop
+			log.Info().Msgf("starting sync loop (interval: %s, all: %v)", syncInterval, syncAll)
+
+			// Run immediately
+			if err := m.CommandSync("", cmdConf); err != nil {
+				log.Error().Err(err).Msg("sync failed")
+			}
+
+			ticker := time.NewTicker(syncInterval)
+			defer ticker.Stop()
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+			for {
+				select {
+				case <-ticker.C:
+					if err := m.CommandSync("", cmdConf); err != nil {
+						log.Error().Err(err).Msg("sync failed")
+					}
+				case <-sigCh:
+					log.Info().Msg("sync loop stopped")
+					return
+				}
+			}
+		}
+
 		if err := m.CommandSync("", cmdConf); err != nil {
 			log.Fatal().Err(err).Msg("sync failed")
 		}
